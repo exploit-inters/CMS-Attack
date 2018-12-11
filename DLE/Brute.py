@@ -149,6 +149,9 @@ async def main():
                                 await asyncio.gather(*tasks)
                                 tasks = []
 
+    if len(tasks) != 0:
+        await asyncio.gather(*tasks)
+
 
 if __name__ == "__main__":
     good = 0
