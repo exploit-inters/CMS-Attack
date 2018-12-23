@@ -128,6 +128,8 @@ async def DLE(link, user, passw, proxy):
                 await save('good', f'{link} - {user}:{passw}')
     except asyncio.TimeoutError:
         save('timeout', f'{link} - {user}:{passw}')
+    except AssertionError:
+        pass
     except Exception as e:
         save('report', e)
     finally:
@@ -154,9 +156,9 @@ async def main():
                         async for site in sites:
                             task = asyncio.create_task(
                                 DLE(
-                                    site.replace('\n', ''),
-                                    user.replace('\n', ''),
-                                    passw.replace('\n', ''),
+                                    site.strip(),
+                                    user.strip(),
+                                    passw.strip(),
                                     proxies[curindx]
                                 )
                             )
