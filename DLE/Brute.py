@@ -118,7 +118,9 @@ async def DLE(link, user, passw, proxy):
         with silent_out():
             async with ClientSession(connector=cproxy) as s:
                 data = await first(s, link)
-                assert await valid(data[1], data[0], link) is True
+                if not await valid(data[1], data[0], link):
+                    await save('rebrut', f'{link} - {user}:{passw}')
+                    return
 
                 _post = await parse(data[0], user, passw)
                 data = await second(s, link, _post)
