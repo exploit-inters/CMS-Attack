@@ -92,8 +92,7 @@ async def process(link, user, passw, proxy):
         passw = macros(passw, link, user)
 
         with silent_out():
-            # connector=cproxy
-            async with ClientSession() as s:
+            async with ClientSession(connector=cproxy) as s:
                 data = await first(s, link)
 
                 if not module.valid(data[1], data[0]):
@@ -177,8 +176,8 @@ if __name__ == "__main__":
         '2': Joomla()
     }
 
-    threads = 2  # int(input('Threads: '))
-    timeout = 30  # int(input('Timeout: '))
+    threads = int(input('Threads: '))
+    timeout = int(input('Timeout: '))
 
     socks_type = input('SOCKS Ver.: ')
     socks_url = input(f'SOCKS{socks_type} Link: ')
