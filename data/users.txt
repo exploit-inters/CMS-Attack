@@ -1,3 +1,2 @@
 admin
-passw
 demo
