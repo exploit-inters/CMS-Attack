@@ -1,0 +1,8 @@
+{
+    "threads": 100,
+    "timeout": 30,
+
+    "socks": 4,
+    "link": "http://localhost/proxy.php",
+    "update": true
+}
