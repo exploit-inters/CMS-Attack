@@ -4,8 +4,8 @@
 Test your site to resistance to a bruteforce attack.
 
 # What required
-- Python 3.7.2  
-- `asyncio aiofiles aiohttp asyncio_timeout aiohttp_socks`
+- Python 3.7  
+- `asyncio aiofiles aiohttp aiohttp_socks`
 
 # Features
 - Asynchronous
@@ -22,6 +22,8 @@ Test your site to resistance to a bruteforce attack.
 - - `https://locahost/dle/admin.php` - DLE
 - - `https://localhost/drupal/user/login?destination=admin` - Drupal
 - - `https://localhost/joomla/administrator/index.php` - Joomla
+- - `https://localhost/wordpress/wp-login.php` - WordPress
+- - `https://localhost/magento/admin` - Magento
 
 # Donations
 - [x] BTC: 1Jr7r5czqkXjU4kT3QWYQHYWYQaveppXdN
