@@ -4,7 +4,7 @@
 Test your site to resistance to a bruteforce attack.
 
 # What required
-- Python 3.7  
+- Python 3.6.7
 - `asyncio aiofiles aiohttp aiohttp_socks`
 
 # Features
